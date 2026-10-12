@@ -122,13 +122,13 @@ function render(){
   td.forEach(function(t){
     var k=t.id+'|'+ds(n),dn=!!done[k],late=!dn&&tmin(t)<=nowMin();
     h+='<div class="card due '+(late?'late ':'')+(dn?'done':'')+'"><div class="row"><div class="grow"><div class="t">'+esc(t.title)+'</div><div class="m">'+t.time+(late?' · 마감 시간 지남':'')+'</div></div>'
-     +'<button class="s '+(dn?'':'p')+'" data-done="'+t.id+'">'+(dn?'되돌리기':'완료')+'</button></div></div>';
+     +'<button class="s" data-ntc="'+t.id+'">공지</button><button class="s '+(dn?'':'p')+'" data-done="'+t.id+'">'+(dn?'되돌리기':'완료')+'</button></div></div>';
   });
   $('todayList').innerHTML=h||'<div class="empty">오늘 마감인 업무가 없어요.</div>';
   var l='';
   tasks.forEach(function(t){
     l+='<div class="card"><div class="row"><div class="grow"><div class="t">'+esc(t.title)+'</div><div class="m">'+label(t)+'</div></div>'
-     +'<button class="s" data-tog="'+t.id+'">'+(t.on?'끄기':'켜기')+'</button><button class="s x" data-del="'+t.id+'">삭제</button></div></div>';
+     +'<button class="s p" data-ntc="'+t.id+'">공지</button><button class="s" data-tog="'+t.id+'">'+(t.on?'끄기':'켜기')+'</button><button class="s x" data-del="'+t.id+'">삭제</button></div></div>';
   });
   $('list').innerHTML=l||'<div class="empty">등록된 알람이 없어요.</div>';
 }
@@ -184,6 +184,7 @@ document.addEventListener('click',function(e){
   if(b.dataset.done){var k=b.dataset.done+'|'+ds(n);if(done[k])delete done[k];else done[k]=1;save(DKEY,done)}
   else if(b.dataset.tog){tasks.forEach(function(t){if(t.id===b.dataset.tog)t.on=!t.on});save(KEY,tasks)}
   else if(b.dataset.del){if(!confirm('이 알람을 삭제할까요?'))return;tasks=tasks.filter(function(t){return t.id!==b.dataset.del});save(KEY,tasks)}
+  else if(b.dataset.ntc){noticeFor(b.dataset.ntc);return}
   else return;
   render();
 });
@@ -264,6 +265,18 @@ function makeImg(){
   ctx.textAlign='left';
   $('cvbox').style.display='block';
   $('cvbox').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function noticeFor(id){
+  var t=null;tasks.forEach(function(x){if(x.id===id)t=x});
+  if(!t)return;
+  var c={};for(var k in t)c[k]=t[k];c.on=true;
+  var d=new Date(),i,f=null;
+  for(i=0;i<400;i++){var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+i);if(isDue(c,x)){f=x;break}}
+  $('iTitle').value=t.title;
+  $('iBody').value=t.title+' 건, 기한 내에 꼭 처리 부탁드립니다.';
+  if(f)$('iDate').value=f.getFullYear()+'-'+('0'+(f.getMonth()+1)).slice(-2)+'-'+('0'+f.getDate()).slice(-2);
+  $('iTime').value=t.time;
+  makeImg();
 }
 $('iMake').onclick=makeImg;
 $('iSave').onclick=function(){
