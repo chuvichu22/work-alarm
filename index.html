@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업무 알람</title>
+<style>
+:root{--ink:#1d2b2a;--bg:#f3f5f2;--card:#fff;--line:#d9dfd8;--main:#1f6f5c;--warn:#c8431f;--soft:#e4efe9}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.5;padding:16px;max-width:560px;margin:0 auto}
+h1{font-size:22px;margin:4px 0 2px}
+h2{font-size:16px;margin:22px 0 8px}
+.sub{color:#5d6b69;font-size:13px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px}
+.row{display:flex;align-items:center;gap:8px}
+.grow{flex:1;min-width:0}
+.t{font-weight:600}
+.m{font-size:12px;color:#5d6b69}
+.due{border-left:5px solid var(--main)}
+.due.late{border-left-color:var(--warn)}
+.done{opacity:.5}
+.done .t{text-decoration:line-through}
+button,select,input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+button{cursor:pointer}
+button.p{background:var(--main);color:#fff;border-color:var(--main)}
+button.s{padding:6px 9px;font-size:13px}
+button.x{color:var(--warn)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #f2b705;outline-offset:1px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form .full{grid-column:1/-1}
+.empty{color:#5d6b69;font-size:14px;padding:6px 2px}
+#ring{position:fixed;left:12px;right:12px;top:12px;max-width:536px;margin:0 auto;background:var(--warn);color:#fff;border-radius:12px;padding:14px;display:none;z-index:9;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+#ring b{font-size:17px}
+#ring button{margin-top:10px;background:#fff;color:var(--warn);border:0;font-weight:700}
+.note{font-size:12px;color:#5d6b69;margin-top:18px}
+</style>
+</head>
+<body>
+<div id="ring"><b id="ringT"></b><div id="ringS"></div><button id="ringOk">확인했어요</button></div>
+
+<h1>업무 알람</h1>
+<p class="sub" id="today"></p>
+<button class="p" id="perm">알림·소리 켜기</button>
+
+<h2>오늘 할 일</h2>
+<div id="todayList"></div>
+
+<h2>알람 목록</h2>
+<div id="list"></div>
+
+<h2>알람 추가</h2>
+<div class="card form">
+  <input class="full" id="fTitle" placeholder="업무 이름 (예: 스케줄등록)">
+  <select id="fCycle"><option value="monthly">매월</option><option value="weekly">매주</option></select>
+  <select id="fDay"></select>
+  <input class="full" id="fTime" type="time" value="09:00">
+  <button class="p full" id="add">추가</button>
+</div>
+
+<p class="note">앱을 열어둔 상태에서만 알람이 울려요. 앱을 열면 오늘 마감인 업무는 항상 맨 위에 표시돼요. 데이터는 이 폰 브라우저에만 저장돼요.</p>
+
+<script>
+(function(){
+var KEY='workAlarm_tasks',DKEY='workAlarm_done';
+var WD=['일','월','화','수','목','금','토'];
+var DEF=[
+ {id:'a1',title:'스케줄등록',cycle:'monthly',day:20,time:'09:00',on:true},
+ {id:'a2',title:'유인계획등록 확인 (행사변경 전주)',cycle:'weekly',day:5,time:'09:00',on:true},
+ {id:'a3',title:'비플 법인카드 등록',cycle:'weekly',day:1,time:'09:00',on:true}
+];
+function load(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v||d}catch(e){return d}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var tasks=load(KEY,null);if(!tasks){tasks=DEF;save(KEY,tasks)}
+var done=load(DKEY,{});
+var fired={};
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ds(d){return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()}
+function isDue(t,d){
+  if(!t.on)return false;
+  if(t.cycle==='weekly')return d.getDay()===t.day;
+  var last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return d.getDate()===Math.min(t.day,last);
+}
+function label(t){return (t.cycle==='weekly'?'매주 '+WD[t.day]+'요일':'매월 '+t.day+'일')+' '+t.time}
+function nowMin(){var n=new Date();return n.getHours()*60+n.getMinutes()}
+function tmin(t){var p=t.time.split(':');return +p[0]*60+ +p[1]}
+
+function render(){
+  var n=new Date();
+  $('today').textContent=n.getFullYear()+'년 '+(n.getMonth()+1)+'월 '+n.getDate()+'일 ('+WD[n.getDay()]+')';
+  var td=tasks.filter(function(t){return isDue(t,n)}).sort(function(a,b){return tmin(a)-tmin(b)});
+  var h='';
+  td.forEach(function(t){
+    var k=t.id+'|'+ds(n),dn=!!done[k],late=!dn&&tmin(t)<=nowMin();
+    h+='<div class="card due '+(late?'late ':'')+(dn?'done':'')+'"><div class="row"><div class="grow"><div class="t">'+esc(t.title)+'</div><div class="m">'+t.time+(late?' · 마감 시간 지남':'')+'</div></div>'
+     +'<button class="s '+(dn?'':'p')+'" data-done="'+t.id+'">'+(dn?'되돌리기':'완료')+'</button></div></div>';
+  });
+  $('todayList').innerHTML=h||'<div class="empty">오늘 마감인 업무가 없어요.</div>';
+  var l='';
+  tasks.forEach(function(t){
+    l+='<div class="card"><div class="row"><div class="grow"><div class="t">'+esc(t.title)+'</div><div class="m">'+label(t)+'</div></div>'
+     +'<button class="s" data-tog="'+t.id+'">'+(t.on?'끄기':'켜기')+'</button><button class="s x" data-del="'+t.id+'">삭제</button></div></div>';
+  });
+  $('list').innerHTML=l||'<div class="empty">등록된 알람이 없어요.</div>';
+}
+
+var ac=null;
+function beep(){
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    for(var i=0;i<3;i++){
+      var o=ac.createOscillator(),g=ac.createGain();
+      o.frequency.value=880;o.connect(g);g.connect(ac.destination);
+      var s=ac.currentTime+i*0.45;g.gain.setValueAtTime(0.25,s);
+      o.start(s);o.stop(s+0.25);
+    }
+  }catch(e){}
+  if(navigator.vibrate)navigator.vibrate([300,150,300,150,300]);
+}
+function ring(t){
+  $('ringT').textContent=t.title;
+  $('ringS').textContent='지금 확인할 시간이에요 ('+t.time+')';
+  $('ring').style.display='block';
+  beep();
+  try{if('Notification' in window&&Notification.permission==='granted')new Notification('업무 알람',{body:t.title})}catch(e){}
+}
+$('ringOk').onclick=function(){$('ring').style.display='none'};
+
+function tick(){
+  var n=new Date(),m=nowMin();
+  tasks.forEach(function(t){
+    var k=t.id+'|'+ds(n);
+    if(isDue(t,n)&&!done[k]&&!fired[k]&&m>=tmin(t)&&m<tmin(t)+60){fired[k]=1;ring(t)}
+  });
+  render();
+}
+
+function fillDays(){
+  var w=$('fCycle').value==='weekly',s='';
+  if(w){for(var i=1;i<=7;i++){var d=i%7;s+='<option value="'+d+'">'+WD[d]+'요일</option>'}}
+  else{for(var j=1;j<=31;j++)s+='<option value="'+j+'">'+j+'일</option>'}
+  $('fDay').innerHTML=s;
+}
+$('fCycle').onchange=fillDays;fillDays();
+
+$('add').onclick=function(){
+  var title=$('fTitle').value.trim();
+  if(!title){$('fTitle').focus();return}
+  tasks.push({id:'t'+Date.now(),title:title,cycle:$('fCycle').value,day:+$('fDay').value,time:$('fTime').value||'09:00',on:true});
+  save(KEY,tasks);$('fTitle').value='';render();
+};
+document.addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b)return;
+  var n=new Date();
+  if(b.dataset.done){var k=b.dataset.done+'|'+ds(n);if(done[k])delete done[k];else done[k]=1;save(DKEY,done)}
+  else if(b.dataset.tog){tasks.forEach(function(t){if(t.id===b.dataset.tog)t.on=!t.on});save(KEY,tasks)}
+  else if(b.dataset.del){if(!confirm('이 알람을 삭제할까요?'))return;tasks=tasks.filter(function(t){return t.id!==b.dataset.del});save(KEY,tasks)}
+  else return;
+  render();
+});
+$('perm').onclick=function(){
+  beep();
+  try{if('Notification' in window)Notification.requestPermission()}catch(e){}
+  $('perm').textContent='켜짐 (앱을 열어둔 상태에서 울려요)';
+};
+document.addEventListener('visibilitychange',function(){if(!document.hidden)tick()});
+tick();setInterval(tick,20000);
+})();
+</script>
+</body>
+</html>
