@@ -33,6 +33,14 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid 
 #ring b{font-size:17px}
 #ring button{margin-top:10px;background:#fff;color:var(--warn);border:0;font-weight:700}
 .note{font-size:12px;color:#5d6b69;margin-top:18px}
+.cvbox{display:none;margin-top:10px}
+.cvbox canvas{width:100%;height:auto;border-radius:10px;border:1px solid var(--line);display:block}
+textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:100%;min-height:90px;resize:vertical;color:var(--ink)}
+.colors{display:flex;gap:8px}
+.colors label{flex:1;text-align:center;padding:8px 0;border-radius:8px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;border:3px solid transparent}
+.colors input{position:absolute;opacity:0;pointer-events:none}
+.colors input:checked+span{outline:3px solid #1d2b2a;outline-offset:2px}
+.colors span{display:block;border-radius:6px;padding:8px 0}
 </style>
 </head>
 <body>
@@ -55,6 +63,26 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid 
   <select id="fDay"></select>
   <input class="full" id="fTime" type="time" value="09:00">
   <button class="p full" id="add">추가</button>
+</div>
+
+<h2>공지 이미지 만들기</h2>
+<div class="card form">
+  <input class="full" id="iTitle" placeholder="제목 (예: 비플 법인카드 등록 안내)">
+  <textarea class="full" id="iBody" placeholder="공지 내용"></textarea>
+  <input id="iDate" type="date" aria-label="기한 날짜">
+  <input id="iTime" type="time" aria-label="기한 시간">
+  <div class="colors full" id="iColors">
+    <label><input type="radio" name="ic" value="#d62828" checked><span style="background:#d62828">빨강</span></label>
+    <label><input type="radio" name="ic" value="#e8590c"><span style="background:#e8590c">주황</span></label>
+    <label><input type="radio" name="ic" value="#1f6f5c"><span style="background:#1f6f5c">초록</span></label>
+    <label><input type="radio" name="ic" value="#1c5fd4"><span style="background:#1c5fd4">파랑</span></label>
+  </div>
+  <button class="p full" id="iMake">이미지 만들기</button>
+</div>
+<div class="cvbox" id="cvbox">
+  <canvas id="cv" width="1080" height="1350"></canvas>
+  <div class="row" style="margin-top:8px"><button class="p grow" id="iSave">이미지 저장</button><button class="grow" id="iShare">공유</button></div>
+  <p class="m">저장이 안 되면 이미지를 길게 눌러서 저장하세요.</p>
 </div>
 
 <p class="note">앱을 열어둔 상태에서만 알람이 울려요. 앱을 열면 오늘 마감인 업무는 항상 맨 위에 표시돼요. 데이터는 이 폰 브라우저에만 저장돼요.</p>
@@ -163,6 +191,93 @@ $('perm').onclick=function(){
   beep();
   try{if('Notification' in window)Notification.requestPermission()}catch(e){}
   $('perm').textContent='켜짐 (앱을 열어둔 상태에서 울려요)';
+};
+/* ===== 공지 이미지 ===== */
+var FF='"Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+function wrapTxt(ctx,text,maxW){
+  var out=[];
+  String(text).split('\n').forEach(function(p){
+    if(!p){out.push('');return}
+    var line='';
+    for(var i=0;i<p.length;i++){
+      var t=line+p[i];
+      if(ctx.measureText(t).width>maxW&&line){out.push(line);line=p[i]}else line=t;
+    }
+    out.push(line);
+  });
+  return out;
+}
+function rr(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function makeImg(){
+  var title=$('iTitle').value.trim()||'공지',body=$('iBody').value.trim();
+  var dv=$('iDate').value,tv=$('iTime').value;
+  var col=document.querySelector('input[name=ic]:checked').value;
+  var c=$('cv'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.textBaseline='alphabetic';ctx.textAlign='left';
+  var size,lines;
+  for(size=92;size>=54;size-=6){
+    ctx.font='900 '+size+'px '+FF;
+    lines=wrapTxt(ctx,title,W-140);
+    if(lines.length<=3)break;
+  }
+  var y0=170,lh=size*1.25,hh=y0+lines.length*lh+30;
+  ctx.fillStyle=col;ctx.fillRect(0,0,W,hh);
+  ctx.fillStyle='#fff';rr(ctx,70,56,170,64,32);ctx.fill();
+  ctx.fillStyle=col;ctx.font='900 38px '+FF;ctx.textAlign='center';ctx.fillText('공지',155,102);
+  ctx.textAlign='left';ctx.fillStyle='#fff';ctx.font='900 '+size+'px '+FF;
+  lines.forEach(function(l,i){ctx.fillText(l,70,y0+lh*i+size*0.9-20)});
+  var y=hh+40;
+  if(dv){
+    var p=dv.split('-'),d=new Date(+p[0],+p[1]-1,+p[2]),n=new Date();
+    var diff=Math.round((d-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000);
+    var dd=diff>0?'D-'+diff:(diff===0?'D-DAY':'마감 지남');
+    var ds2=(d.getMonth()+1)+'월 '+d.getDate()+'일 ('+WD[d.getDay()]+')'+(tv?' '+tv:'')+' 까지';
+    rr(ctx,50,y,W-100,240,28);ctx.fillStyle='#ffe14d';ctx.fill();
+    ctx.lineWidth=8;ctx.strokeStyle='#1d2b2a';ctx.stroke();
+    ctx.fillStyle='#1d2b2a';ctx.font='800 38px '+FF;ctx.fillText('마감 기한',90,y+70);
+    var fs=70;ctx.font='900 '+fs+'px '+FF;
+    while(ctx.measureText(ds2).width>620&&fs>40){fs-=4;ctx.font='900 '+fs+'px '+FF}
+    ctx.fillText(ds2,90,y+170);
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(W-170,y+120,100,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.textAlign='center';
+    var bs=diff<0?44:70;ctx.font='900 '+bs+'px '+FF;ctx.fillText(dd,W-170,y+120+bs*0.35);
+    ctx.textAlign='left';
+    y+=240+50;
+  }
+  var fh=120,avail=H-fh-y-20;
+  if(body){
+    var bsz,bl,blh;
+    for(bsz=54;bsz>=28;bsz-=2){
+      ctx.font='600 '+bsz+'px '+FF;bl=wrapTxt(ctx,body,W-140);blh=bsz*1.5;
+      if(bl.length*blh<=avail)break;
+    }
+    ctx.fillStyle='#222';
+    var maxL=Math.floor(avail/blh);
+    bl.slice(0,maxL).forEach(function(l,i){ctx.fillText(l,70,y+bsz+blh*i)});
+  }
+  ctx.fillStyle=col;ctx.fillRect(0,H-fh,W,fh);
+  ctx.fillStyle='#fff';ctx.font='900 44px '+FF;ctx.textAlign='center';
+  ctx.fillText('기한 꼭 지켜주세요!',W/2,H-fh/2+16);
+  ctx.textAlign='left';
+  $('cvbox').style.display='block';
+  $('cvbox').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('iMake').onclick=makeImg;
+$('iSave').onclick=function(){
+  var a=document.createElement('a');a.href=$('cv').toDataURL('image/png');a.download='공지.png';
+  document.body.appendChild(a);a.click();a.remove();
+};
+$('iShare').onclick=function(){
+  $('cv').toBlob(function(b){
+    try{
+      var f=new File([b],'공지.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]});
+      else alert('이 브라우저는 공유를 지원하지 않아요. 저장 버튼을 써주세요.');
+    }catch(e){alert('공유할 수 없어요. 저장 버튼을 써주세요.')}
+  });
 };
 document.addEventListener('visibilitychange',function(){if(!document.hidden)tick()});
 tick();setInterval(tick,20000);
